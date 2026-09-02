@@ -1,0 +1,159 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * CROWN design system — premium dark financial UI.
+ * Near-black charcoal surfaces, subtle borders, restrained royal-gold accent.
+ * All colors are oklch semantic tokens. Never hardcode colors in components.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-elevated: var(--elevated);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-gold-soft: var(--gold-soft);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-btc: var(--btc);
+  --color-eth: var(--eth);
+  --color-sol: var(--sol);
+  --color-bnb: var(--bnb);
+  --color-xrp: var(--xrp);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", monospace;
+}
+
+:root {
+  --radius: 0.75rem;
+
+  --background: oklch(0.16 0.006 260);
+  --foreground: oklch(0.975 0.003 260);
+
+  --card: oklch(0.201 0.006 260);
+  --card-foreground: oklch(0.975 0.003 260);
+  --elevated: oklch(0.238 0.007 260);
+
+  --popover: oklch(0.201 0.006 260);
+  --popover-foreground: oklch(0.975 0.003 260);
+
+  --primary: oklch(0.975 0.003 260);
+  --primary-foreground: oklch(0.16 0.006 260);
+
+  --secondary: oklch(0.253 0.007 260);
+  --secondary-foreground: oklch(0.95 0.003 260);
+
+  --muted: oklch(0.253 0.007 260);
+  --muted-foreground: oklch(0.68 0.011 260);
+
+  --accent: oklch(0.27 0.008 260);
+  --accent-foreground: oklch(0.975 0.003 260);
+
+  --gold: oklch(0.815 0.135 86);
+  --gold-foreground: oklch(0.19 0.02 80);
+  --gold-soft: oklch(0.815 0.135 86 / 12%);
+
+  --destructive: oklch(0.63 0.2 22);
+  --destructive-foreground: oklch(0.98 0.003 260);
+  --success: oklch(0.74 0.15 155);
+  --warning: oklch(0.8 0.14 75);
+  --info: oklch(0.72 0.11 240);
+
+  --border: oklch(1 0 0 / 9%);
+  --border-strong: oklch(1 0 0 / 16%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.815 0.135 86 / 55%);
+
+  --btc: oklch(0.76 0.155 62);
+  --eth: oklch(0.72 0.1 275);
+  --sol: oklch(0.78 0.16 165);
+  --bnb: oklch(0.83 0.15 95);
+  --xrp: oklch(0.8 0.02 260);
+
+  --chart-1: var(--btc);
+  --chart-2: var(--eth);
+  --chart-3: var(--sol);
+  --chart-4: var(--bnb);
+  --chart-5: var(--xrp);
+
+  --sidebar: oklch(0.19 0.006 260);
+  --sidebar-foreground: oklch(0.975 0.003 260);
+  --sidebar-primary: oklch(0.815 0.135 86);
+  --sidebar-primary-foreground: oklch(0.19 0.02 80);
+  --sidebar-accent: oklch(0.253 0.007 260);
+  --sidebar-accent-foreground: oklch(0.975 0.003 260);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.815 0.135 86 / 55%);
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum" 0;
+  }
+
+  ::selection {
+    background: var(--gold-soft);
+  }
+}
+
+@utility surface {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility gold-ring {
+  border-color: color-mix(in oklch, var(--gold) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--gold) 22%, transparent);
+}
