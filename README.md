@@ -6,6 +6,8 @@ highest percentage return over the same exact 4-hour UTC window. Anyone can
 create a valid future market, users stake GEN pari-mutuel style, and settlement
 uses independent data from multiple exchange sources.
 
+**Live Demo:** [crown-teal.vercel.app](https://crown-teal.vercel.app/)
+
 ## Vision
 
 Crown started from a simple observation: short-term crypto markets are rarely
