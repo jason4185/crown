@@ -20,12 +20,15 @@ import { Input } from "@/components/ui/input";
 import {
   formatCrownGen,
   formatCrownGenInput,
+  deriveCrownConsensusResult,
+  deriveCrownInconclusiveReason,
   getProtocolConfig,
   parseCrownGen,
   writeCrownTransaction,
   type CrownMarket,
   type CrownPosition,
   type CrownProtocolConfig,
+  type CrownResolution,
   type TxProgress,
   type TxStage,
 } from "@/lib/crown/contract";
@@ -67,12 +70,20 @@ export function ActionPanel({
   positionLoading = false,
   positionError = false,
   onRetryPosition,
+  resolution,
+  resolutionLoading = false,
+  resolutionError = false,
+  onRetryResolution,
 }: {
   market: CrownMarket;
   position: CrownPosition | null;
   positionLoading?: boolean;
   positionError?: boolean;
   onRetryPosition?: (() => void) | undefined;
+  resolution?: CrownResolution | undefined;
+  resolutionLoading?: boolean;
+  resolutionError?: boolean;
+  onRetryResolution?: (() => void) | undefined;
 }) {
   const position = rawPosition?.hasPosition ? rawPosition : null;
   const { address, chainId, connector, isConnected } = useAccount();
@@ -307,27 +318,41 @@ export function ActionPanel({
         ]
       : null;
 
-  const disconnectedContent = (
-    <>
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <Wallet className="h-4 w-4 text-gold" /> Connect your wallet
-      </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Connect an injected wallet to view your position or place a prediction
-        while the market is open.
-      </p>
-      <Button
-        className="mt-4 h-11 w-full bg-gold text-gold-foreground hover:bg-gold/90"
-        onClick={() => openConnectModal?.()}
-      >
-        Connect Wallet
-      </Button>
-      <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-        <span className="text-xs text-muted-foreground">Market status</span>
-        <StatusBadge status={market.status} />
-      </div>
-    </>
-  );
+  const disconnectedContent =
+    market.status === "INCONCLUSIVE" && market.onchain.totalPool === 0n ? (
+      <>
+        <div className="text-sm font-semibold">Market inconclusive</div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          No positions were placed in this market, so there was no backed
+          winning pool to settle.
+        </p>
+        <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+          <span className="text-xs text-muted-foreground">Market status</span>
+          <StatusBadge status={market.status} />
+        </div>
+      </>
+    ) : (
+      <>
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Wallet className="h-4 w-4 text-gold" /> Connect your wallet
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {market.status === "INCONCLUSIVE"
+            ? "Connect your wallet to check whether you have a refundable position."
+            : "Connect an injected wallet to view your position or place a prediction while the market is open."}
+        </p>
+        <Button
+          className="mt-4 h-11 w-full bg-gold text-gold-foreground hover:bg-gold/90"
+          onClick={() => openConnectModal?.()}
+        >
+          Connect Wallet
+        </Button>
+        <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+          <span className="text-xs text-muted-foreground">Market status</span>
+          <StatusBadge status={market.status} />
+        </div>
+      </>
+    );
 
   let content: React.ReactNode;
   if (!isConnected) {
@@ -616,13 +641,50 @@ export function ActionPanel({
       </>
     );
   } else if (market.status === "INCONCLUSIVE") {
+    const inconclusiveReason = deriveCrownInconclusiveReason(
+      market.onchain.totalPool,
+      market.onchain.winningPool,
+      resolution,
+    );
+    const consensusResult = resolution
+      ? deriveCrownConsensusResult(resolution)
+      : null;
     content = (
       <>
         <div className="text-sm font-semibold">Market inconclusive</div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          No final winner was established under Crown's settlement rules.
-          Original stakes are refundable — each user claims their own refund.
-        </p>
+        {inconclusiveReason === "EMPTY_MARKET" ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            No positions were placed in this market, so there was no backed
+            winning pool to settle.
+          </p>
+        ) : resolutionError ? (
+          <CrownErrorState
+            title="Unable to load settlement details"
+            message="We couldn't verify why this market became inconclusive."
+            onRetry={onRetryResolution}
+          />
+        ) : resolutionLoading || !resolution ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Loading settlement details…
+          </p>
+        ) : inconclusiveReason === "ZERO_BACKED_WINNER" && consensusResult ? (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The settlement sources reached a result, but the winning asset had
+              no backed pool. Crown therefore finalized the market as
+              inconclusive.
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Consensus result: {consensusResult.asset} ·{" "}
+              {consensusResult.count}/3
+            </p>
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Crown could not finalize a backed winner under the settlement rules,
+            so participant stakes are refundable.
+          </p>
+        )}
         {position ? (
           <>
             <div className="mt-4 space-y-1">
@@ -644,7 +706,7 @@ export function ActionPanel({
           </>
         ) : (
           <p className="mt-4 text-sm text-muted-foreground">
-            Connect the wallet that owns a position to claim its refund.
+            You did not enter this market.
           </p>
         )}
       </>

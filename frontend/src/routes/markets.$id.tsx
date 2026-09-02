@@ -19,6 +19,8 @@ import {
 } from "@/lib/crown/presentation";
 import {
   getMarket,
+  deriveCrownConsensusResult,
+  deriveCrownInconclusiveReason,
   formatCrownGen,
   getResolution,
   getUserPosition,
@@ -182,6 +184,14 @@ function Settlement({
         },
       ]
     : [];
+  const consensusResult = resolution
+    ? deriveCrownConsensusResult(resolution)
+    : null;
+  const inconclusiveReason = deriveCrownInconclusiveReason(
+    market.onchain.totalPool,
+    market.onchain.winningPool,
+    resolution,
+  );
   return (
     <div>
       <div className="space-y-2">
@@ -238,33 +248,52 @@ function Settlement({
           At least 2 of 3 valid sources
         </span>
         <span className="ml-auto flex items-center gap-2">
-          {!error &&
-            ((resolution?.finalWinner ?? market.winner) ? (
+          {!error && resolution ? (
+            (resolution.finalWinner ?? market.winner) ? (
               <>
                 <Check className="h-4 w-4 text-gold" />
                 <span className="text-muted-foreground">Contract winner</span>
                 <span className="font-semibold text-gold">
-                  {resolution?.finalWinner ?? market.winner}
+                  {resolution.finalWinner ?? market.winner}
                 </span>
                 <span className="tabular text-muted-foreground">
-                  · Consensus{" "}
-                  {resolution?.consensusCount ??
-                    market.onchain.consensusCount.toString()}
-                  /3
+                  · Consensus {resolution.consensusCount}/3
                 </span>
               </>
             ) : market.status === "INCONCLUSIVE" ? (
               <>
                 <X className="h-4 w-4 text-destructive" />
                 <span className="text-muted-foreground">
-                  No consensus — INCONCLUSIVE
+                  Final market state: Inconclusive
                 </span>
+                {consensusResult ? (
+                  <>
+                    <span className="text-muted-foreground">
+                      · Consensus result: {consensusResult.asset} (
+                      {consensusResult.count}/3)
+                    </span>
+                    {inconclusiveReason === "ZERO_BACKED_WINNER" && (
+                      <span className="text-muted-foreground">
+                        · Reason: No backed winning pool
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">
+                    · No backed winner was finalized
+                  </span>
+                )}
               </>
             ) : (
               <span className="text-muted-foreground">
                 Settlement is still pending and may be retried.
               </span>
-            ))}
+            )
+          ) : (
+            <span className="text-muted-foreground">
+              Settlement details are not available yet.
+            </span>
+          )}
         </span>
       </div>
     </div>
@@ -479,6 +508,10 @@ function MarketDetail() {
             positionLoading={positionQuery.isLoading}
             positionError={positionQuery.isError}
             onRetryPosition={() => void positionQuery.refetch()}
+            resolution={resolutionQuery.data}
+            resolutionLoading={resolutionQuery.isLoading}
+            resolutionError={resolutionQuery.isError}
+            onRetryResolution={() => void resolutionQuery.refetch()}
           />
         </aside>
       </div>

@@ -163,6 +163,54 @@ export type CrownResolution = {
   consensusCount: number;
 };
 
+export type CrownConsensusResult = {
+  asset: AssetSymbol;
+  count: number;
+};
+
+/**
+ * Reconstruct the exposed source consensus for explanatory UI copy. The
+ * contract intentionally keeps a zero-backed consensus out of final_winner.
+ */
+export function deriveCrownConsensusResult(
+  resolution: CrownResolution,
+): CrownConsensusResult | null {
+  const votes: Array<[string, AssetSymbol | null]> = [
+    [resolution.binanceStatus, resolution.binanceWinner],
+    [resolution.bitgetStatus, resolution.bitgetWinner],
+    [resolution.gateStatus, resolution.gateWinner],
+  ];
+
+  for (const asset of ASSETS) {
+    const count = votes.filter(
+      ([status, winner]) => status === "VALID" && winner === asset,
+    ).length;
+    if (count >= 2 && count === resolution.consensusCount) {
+      return { asset, count };
+    }
+  }
+
+  return null;
+}
+
+export type CrownInconclusiveReason =
+  "EMPTY_MARKET" | "ZERO_BACKED_WINNER" | "NO_CONSENSUS" | "UNKNOWN";
+
+export function deriveCrownInconclusiveReason(
+  totalPool: bigint,
+  winningPool: bigint,
+  resolution?: CrownResolution | undefined,
+): CrownInconclusiveReason {
+  if (totalPool === 0n) return "EMPTY_MARKET";
+  if (!resolution) return "UNKNOWN";
+  const consensusResult = deriveCrownConsensusResult(resolution);
+  if (consensusResult !== null && winningPool === 0n) {
+    return "ZERO_BACKED_WINNER";
+  }
+  if (consensusResult !== null) return "UNKNOWN";
+  return "NO_CONSENSUS";
+}
+
 export type CrownMarketPage = {
   markets: CrownMarket[];
   marketIds: number[];
