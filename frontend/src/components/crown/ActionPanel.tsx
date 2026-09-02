@@ -548,8 +548,7 @@ export function ActionPanel({
         {!positionRows && (
           <p className="mt-2 text-sm text-muted-foreground">
             You didn't enter this market before the betting window closed. New
-            positions are not allowed once the 4-hour performance window
-            begins.
+            positions are not allowed once the 4-hour performance window begins.
           </p>
         )}
         {positionRows && <div className="mt-4 space-y-1">{positionRows}</div>}
