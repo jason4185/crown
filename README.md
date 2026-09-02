@@ -6,6 +6,20 @@ highest percentage return over the same exact 4-hour UTC window. Anyone can
 create a valid future market, users stake GEN pari-mutuel style, and settlement
 uses independent data from multiple exchange sources.
 
+## Vision
+
+Crown started from a simple observation: short-term crypto markets are rarely
+viewed in isolation. Traders compare which asset is leading, which is lagging,
+and where relative strength is emerging. Most prediction markets ask whether a
+single asset will move up or down; Crown asks which asset performs best over the
+same exact window.
+
+By putting BTC, ETH, SOL, BNB, and XRP into one fixed 4-hour race, Crown turns
+relative market performance into a simple permissionless prediction market. The
+goal is transparent settlement without a trusted operator: fixed UTC windows,
+deterministic financial rules, and independent exchange data resolved through
+GenLayer consensus.
+
 ## How Crown Works
 
 1. A market is created for one canonical 4-hour UTC window.
@@ -30,6 +44,21 @@ flowchart LR
     H --> J[Claim]
     I --> J
 ```
+
+## Key Innovations
+
+- **Relative-performance markets:** Five assets compete over one exact UTC
+  window; the outcome is the highest percentage return, not an isolated Up/Down
+  call.
+- **Canonical 4-hour windows:** Every market uses a fixed UTC-aligned candle
+  boundary, so all assets share the same start and end conditions.
+- **Multi-source settlement:** Binance, Bitget, and Gate independently evaluate
+  native 4-hour candles. At least two of three valid sources must agree.
+- **Permissionless lifecycle:** Anyone can create a valid market or request
+  settlement when ready; users claim their own payout or refund directly.
+- **Bounded uncertainty handling:** Temporary source outages can keep settlement
+  retryable, while insufficient evidence ultimately becomes `INCONCLUSIVE` and
+  enables refunds.
 
 ## 4-Hour Market Windows
 
@@ -130,13 +159,6 @@ positions cannot claim.
 
 In an `INCONCLUSIVE` market, each participant can claim their original stake.
 Claims are recorded by the contract and cannot be claimed twice.
-
-## Why Crown
-
-- Five-asset relative-performance markets instead of a binary question.
-- Fixed 4-hour UTC windows with permissionless market creation.
-- Three independent candle sources with 2-of-3 source consensus.
-- Pari-mutuel GEN payouts based on the winning pool.
 
 ## Contract Interface
 
