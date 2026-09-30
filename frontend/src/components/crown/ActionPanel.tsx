@@ -20,20 +20,20 @@ import { Input } from "@/components/ui/input";
 import {
   formatCrownGen,
   formatCrownGenInput,
+  crownTransaction,
   deriveCrownConsensusResult,
   deriveCrownInconclusiveReason,
   getProtocolConfig,
   parseCrownGen,
-  writeCrownTransaction,
   type CrownMarket,
   type CrownPosition,
-  type CrownProtocolConfig,
   type CrownResolution,
-  type TxProgress,
-  type TxStage,
+  type CrownTransactionRequest,
+  type CrownWriteMethod,
 } from "@/lib/crown/contract";
 import { GENLAYER_CHAIN_ID } from "@/lib/crown/config";
 import { getCrownErrorCopy } from "@/lib/crown/errors";
+import { useCrownTransactionKit } from "@/lib/crown/kit";
 import {
   ASSETS,
   fmtUtcMarketWindow,
@@ -59,9 +59,10 @@ type TransactionState = {
   title: string;
   details: Array<[string, string]>;
   open: boolean;
-  stage: TxStage;
-  error?: string | undefined;
-  hash?: string | undefined;
+  tx: CrownTransactionRequest;
+  userValueGen?: string | undefined;
+  finalized?: boolean | undefined;
+  onAccepted?: (() => void) | undefined;
 };
 
 export function ActionPanel({
@@ -87,6 +88,7 @@ export function ActionPanel({
 }) {
   const position = rawPosition?.hasPosition ? rawPosition : null;
   const { address, chainId, connector, isConnected } = useAccount();
+  const kit = useCrownTransactionKit(address, connector);
   const { openConnectModal } = useConnectModal();
   const { openChainModal } = useChainModal();
   const queryClient = useQueryClient();
@@ -136,7 +138,7 @@ export function ActionPanel({
     }
     if (chainId !== GENLAYER_CHAIN_ID) {
       toast.error("Wrong network", {
-        description: "Switch to GenLayer Bradbury to continue.",
+        description: "Switch to GenLayer Studio Next to continue.",
       });
       openChainModal?.();
       return false;
@@ -144,65 +146,51 @@ export function ActionPanel({
     return true;
   };
 
-  const runTransaction = async ({
+  const runTransaction = ({
     title,
     details,
     functionName,
     args,
     value = 0n,
-    waitForFinality = false,
+    finalized = false,
     successTitle,
     successDescription,
+    onAccepted,
   }: {
     title: string;
     details: Array<[string, string]>;
-    functionName: string;
-    args: unknown[];
+    functionName: CrownWriteMethod;
+    args: (bigint | number | string)[];
     value?: bigint;
-    waitForFinality?: boolean;
+    finalized?: boolean;
     successTitle?: string;
     successDescription?: string;
-  }): Promise<boolean> => {
+    onAccepted?: () => void;
+  }): boolean => {
     if (!ensureWallet() || !address) return false;
-    setBusy(true);
-    setTransaction({ title, details, open: true, stage: "preparing" });
     try {
-      await writeCrownTransaction({
-        address,
-        connector,
-        functionName,
-        args,
-        value,
-        waitForFinality,
-        onProgress: (progress: TxProgress) =>
-          setTransaction((current) =>
-            current
-              ? {
-                  ...current,
-                  stage: progress.stage,
-                  hash: progress.hash ?? current.hash,
-                }
-              : current,
-          ),
-      });
-      await invalidate();
-      setTransaction((current) =>
-        current ? { ...current, stage: "success" } : current,
-      );
-      toast.success(successTitle ?? `${title} confirmed`, {
-        description: successDescription,
+      setBusy(true);
+      setTransaction({
+        title,
+        details,
+        open: true,
+        tx: crownTransaction(functionName, args),
+        userValueGen: value > 0n ? formatCrownGenInput(value) : undefined,
+        finalized,
+        onAccepted: () => {
+          void invalidate();
+          toast.success(successTitle ?? `${title} confirmed`, {
+            description: successDescription,
+          });
+          onAccepted?.();
+          setBusy(false);
+        },
       });
       return true;
     } catch (error) {
       const copy = getCrownErrorCopy(error);
-      const message = `${copy.title}: ${copy.message}`;
-      setTransaction((current) =>
-        current ? { ...current, stage: "failed", error: message } : current,
-      );
       toast.error(copy.title, { description: copy.message });
       return false;
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -245,7 +233,7 @@ export function ActionPanel({
       });
       return;
     }
-    const succeeded = await runTransaction({
+    runTransaction({
       title: position ? `Top up ${selected}` : `Predict ${selected}`,
       details: [
         ["Asset", selected],
@@ -259,8 +247,8 @@ export function ActionPanel({
       successDescription: position
         ? `${formatCrownGen(stake)} was added to your ${selected} position.`
         : `You backed ${selected} with ${formatCrownGen(stake)}.`,
+      onAccepted: () => setAmount("1"),
     });
-    if (succeeded) setAmount("1");
   };
 
   const claim = async () => {
@@ -274,7 +262,7 @@ export function ActionPanel({
       ],
       functionName: "claim",
       args: [BigInt(market.id)],
-      waitForFinality: true,
+      finalized: true,
       successTitle:
         position.claimType === "REFUND" ? "Refund claimed" : "Claim successful",
       successDescription:
@@ -300,8 +288,10 @@ export function ActionPanel({
   };
 
   const closeTransaction = (open: boolean) => {
-    if (!busy && !open) setTransaction(null);
-    else
+    if (!open) {
+      setTransaction(null);
+      setBusy(false);
+    } else
       setTransaction((current) => (current ? { ...current, open } : current));
   };
 
@@ -778,9 +768,12 @@ export function ActionPanel({
           onOpenChange={closeTransaction}
           title={transaction.title}
           details={transaction.details}
-          stage={transaction.stage}
-          error={transaction.error}
-          hash={transaction.hash}
+          kit={kit}
+          tx={transaction.tx}
+          userValueGen={transaction.userValueGen}
+          finalized={transaction.finalized}
+          onAccepted={transaction.onAccepted}
+          onFailed={() => setBusy(false)}
         />
       )}
     </>

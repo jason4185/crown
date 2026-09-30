@@ -80,21 +80,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
-        { title: "Crown — 4H Crypto Relative Performance Markets" },
+        { title: "Crown — Crypto and Energy Markets" },
         {
           name: "description",
           content:
-            "Crown is a permissionless pari-mutuel market for the asset with the highest percentage return across exact 4-hour UTC windows.",
+            "Crown is a permissionless pari-mutuel market for Crypto and Energy outcomes across exact UTC windows.",
         },
         { name: "author", content: "Crown" },
         {
           property: "og:title",
-          content: "Crown — 4H Crypto Relative Performance Markets",
+          content: "Crown — Crypto and Energy Markets",
         },
         {
           property: "og:description",
           content:
-            "Stake GEN on BTC, ETH, SOL, BNB or XRP. Binance, Bitget and Gate settle Crown markets.",
+            "Stake GEN on Crypto and Energy outcomes. Binance, Gate and Bitget settle Crown markets.",
         },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary_large_image" },

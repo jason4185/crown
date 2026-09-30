@@ -33,6 +33,7 @@ export const STATUS_LABEL: Record<MarketStatus, string> = {
 };
 
 export type Market = {
+  family: "CRYPTO";
   id: number;
   startISO: string;
   endISO: string;

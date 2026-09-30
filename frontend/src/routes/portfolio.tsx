@@ -20,18 +20,26 @@ import { TransactionDialog } from "@/components/crown/TransactionDialog";
 import { Button } from "@/components/ui/button";
 import {
   formatCrownGen,
+  crownTransaction,
   getMarketsPage,
   getUserPosition,
-  writeCrownTransaction,
   type CrownMarket,
   type CrownPosition,
-  type TxProgress,
-  type TxStage,
+  type CrownTransactionRequest,
 } from "@/lib/crown/contract";
 import { GENLAYER_CHAIN_ID } from "@/lib/crown/config";
 import { getCrownErrorCopy } from "@/lib/crown/errors";
+import { useCrownTransactionKit } from "@/lib/crown/kit";
 import { fmtUtcMarketWindow } from "@/lib/crown/presentation";
 import { cn } from "@/lib/utils";
+import {
+  energyOutcomeLabel,
+  formatEnergyGen,
+  getEnergyMarketsPage,
+  getEnergyPosition,
+  type EnergyMarket,
+  type EnergyPosition,
+} from "@/lib/crown/energy";
 
 export const Route = createFileRoute("/portfolio")({
   head: () => ({
@@ -89,15 +97,14 @@ function ClaimButton({
   position: CrownPosition;
 }) {
   const { address, chainId, connector, isConnected } = useAccount();
+  const kit = useCrownTransactionKit(address, connector);
   const { openConnectModal } = useConnectModal();
   const { openChainModal } = useChainModal();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [transaction, setTransaction] = useState<{
     open: boolean;
-    stage: TxStage;
-    hash?: string | undefined;
-    error?: string | undefined;
+    tx: CrownTransactionRequest;
   } | null>(null);
   if (
     !position.claimAvailable ||
@@ -112,59 +119,20 @@ function ClaimButton({
     }
     if (chainId !== GENLAYER_CHAIN_ID) {
       toast.error("Wrong network", {
-        description: "Switch to GenLayer Bradbury to continue.",
+        description: "Switch to GenLayer Studio Next to continue.",
       });
       openChainModal?.();
       return;
     }
     setBusy(true);
-    setTransaction({ open: true, stage: "preparing" });
     try {
-      await writeCrownTransaction({
-        address,
-        connector,
-        functionName: "claim",
-        args: [BigInt(market.id)],
-        waitForFinality: true,
-        onProgress: (progress: TxProgress) =>
-          setTransaction((current) =>
-            current
-              ? {
-                  ...current,
-                  stage: progress.stage,
-                  hash: progress.hash ?? current.hash,
-                }
-              : current,
-          ),
+      setTransaction({
+        open: true,
+        tx: crownTransaction("claim", [BigInt(market.id)]),
       });
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["crown", "market", market.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["crown", "position", market.id],
-        }),
-      ]);
-      setTransaction((current) =>
-        current ? { ...current, stage: "success" } : current,
-      );
-      if (position.claimType === "REFUND") {
-        toast.success("Refund claimed", {
-          description: "Your original stake was refunded.",
-        });
-      } else {
-        toast.success("Claim successful", {
-          description: "Your payout was claimed.",
-        });
-      }
     } catch (error) {
       const copy = getCrownErrorCopy(error);
-      const message = `${copy.title}: ${copy.message}`;
-      setTransaction((current) =>
-        current ? { ...current, stage: "failed", error: message } : current,
-      );
       toast.error(copy.title, { description: copy.message });
-    } finally {
       setBusy(false);
     }
   };
@@ -187,7 +155,10 @@ function ClaimButton({
         <TransactionDialog
           open={transaction.open}
           onOpenChange={(open) => {
-            if (!open && !busy) setTransaction(null);
+            if (!open) {
+              setTransaction(null);
+              setBusy(false);
+            }
           }}
           title={
             position.claimType === "REFUND" ? "Claim refund" : "Claim payout"
@@ -200,9 +171,41 @@ function ClaimButton({
               fmtUtcMarketWindow(market.startISO, market.endISO),
             ],
           ]}
-          stage={transaction.stage}
-          error={transaction.error}
-          hash={transaction.hash}
+          kit={kit}
+          tx={transaction.tx}
+          finalized
+          onAccepted={() => {
+            void Promise.all([
+              queryClient.invalidateQueries({
+                queryKey: ["crown", "market", market.id],
+              }),
+              queryClient.invalidateQueries({
+                queryKey: ["crown", "position", market.id],
+              }),
+            ]).then(() => {
+              setBusy(false);
+              toast.success(
+                position.claimType === "REFUND"
+                  ? "Refund claimed"
+                  : "Claim successful",
+                {
+                  description:
+                    position.claimType === "REFUND"
+                      ? "Your original stake was refunded."
+                      : "Your payout was claimed.",
+                },
+              );
+            });
+          }}
+          onFailed={(status) => {
+            setBusy(false);
+            const copy = getCrownErrorCopy(
+              new Error(
+                status.executionResultName ?? "Crown transaction failed",
+              ),
+            );
+            toast.error(copy.title, { description: copy.message });
+          }}
         />
       )}
     </>
@@ -297,6 +300,98 @@ function PositionCard({
   );
 }
 
+function EnergyPositionCard({
+  market,
+  position,
+}: {
+  market: EnergyMarket;
+  position: EnergyPosition;
+}) {
+  const settled =
+    market.status === "RESOLVED" || market.status === "INCONCLUSIVE";
+  return (
+    <article className="surface p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs text-gold">Energy · {market.marketType}</div>
+          <div className="tabular mt-1 text-sm">
+            {fmtUtcMarketWindow(market.startISO, market.endISO)}
+          </div>
+        </div>
+        <StatusBadge status={market.status} />
+      </div>
+      <div className="mt-5 flex items-center gap-3 rounded-lg border border-gold/35 bg-gold-soft p-3">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gold/35 bg-gold-soft text-gold">
+          E
+        </span>
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Your pick
+          </div>
+          <div className="text-sm font-semibold">
+            {energyOutcomeLabel(position.selectedOutcome ?? "—")}
+          </div>
+        </div>
+        <div className="ml-auto text-right">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Stake
+          </div>
+          <div className="tabular text-sm font-medium">
+            {formatEnergyGen(position.stake)}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-x-5 gap-y-2 sm:grid-cols-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Duration</span>
+          <span className="tabular">{market.durationLabel}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Result</span>
+          <span className={cn(position.positionWon && "text-gold")}>
+            {settled
+              ? market.status === "INCONCLUSIVE"
+                ? "Refundable"
+                : position.positionWon
+                  ? "Won"
+                  : "Lost"
+              : "Pending"}
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Claim state</span>
+          <span>
+            {position.claimAvailable
+              ? position.refundAvailable
+                ? "Refund available"
+                : "Payout available"
+              : position.claimed || position.refunded
+                ? "Claimed"
+                : "No claim available"}
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Claimable</span>
+          <span className="tabular">
+            {position.claimAvailable
+              ? formatEnergyGen(position.claimableAmount)
+              : "—"}
+          </span>
+        </div>
+      </div>
+      <div className="mt-5 border-t border-border pt-4">
+        <Link
+          to="/energy/$id"
+          params={{ id: String(market.id) }}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-elevated px-3 py-2 text-xs font-medium transition-colors hover:border-gold/45 hover:text-gold"
+        >
+          View Energy Market <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </article>
+  );
+}
+
 function PortfolioPage() {
   const [tab, setTab] = useState<PortfolioTab>("active");
   const { address } = useAccount();
@@ -318,10 +413,37 @@ function PortfolioPage() {
   });
   const positionsLoading = positionQueries.some((query) => query.isLoading);
   const positionsError = positionQueries.some((query) => query.isError);
+  const energyMarketsQuery = useQuery({
+    queryKey: ["crown", "energy", "portfolio-markets", 0, 25],
+    queryFn: () => getEnergyMarketsPage(0, 25),
+    enabled: Boolean(address),
+    staleTime: 15_000,
+  });
+  const energyMarkets = energyMarketsQuery.data?.markets ?? [];
+  const energyPositionQueries = useQueries({
+    queries: energyMarkets.map((market) => ({
+      queryKey: ["crown", "energy", "position", market.id, address],
+      queryFn: () => getEnergyPosition(market.id, address!),
+      enabled: Boolean(address),
+      staleTime: 10_000,
+    })),
+  });
+  const energyRows = energyMarkets.flatMap((market, index) => {
+    const position = energyPositionQueries[index]?.data;
+    return position?.hasPosition ? [{ market, position }] : [];
+  });
+  const energyPositionsLoading = energyPositionQueries.some(
+    (query) => query.isLoading,
+  );
+  const energyPositionsError = energyPositionQueries.some(
+    (query) => query.isError,
+  );
   const retryPortfolio = () => {
     void Promise.all([
       marketsQuery.refetch(),
       ...positionQueries.map((query) => query.refetch()),
+      energyMarketsQuery.refetch(),
+      ...energyPositionQueries.map((query) => query.refetch()),
     ]);
   };
   const rows = markets.flatMap((market, index) => {
@@ -349,7 +471,37 @@ function PortfolioPage() {
     }),
     [rows],
   );
+  const combinedTotals = {
+    totalStaked:
+      totals.totalStaked +
+      energyRows.reduce((sum, row) => sum + row.position.stake, 0n),
+    claimable:
+      totals.claimable +
+      energyRows.reduce(
+        (sum, row) =>
+          sum +
+          (row.position.claimAvailable ? row.position.claimableAmount : 0n),
+        0n,
+      ),
+    active:
+      totals.active +
+      energyRows.filter((row) => ACTIVE_STATUSES.has(row.market.status)).length,
+    settled:
+      totals.settled +
+      energyRows.filter(
+        (row) =>
+          row.market.status === "RESOLVED" ||
+          row.market.status === "INCONCLUSIVE",
+      ).length,
+  };
   const filtered = rows.filter(({ market, position }) =>
+    tab === "active"
+      ? ACTIVE_STATUSES.has(market.status)
+      : tab === "claimable"
+        ? position.claimAvailable
+        : market.status === "RESOLVED" || market.status === "INCONCLUSIVE",
+  );
+  const visibleEnergyRows = energyRows.filter(({ market, position }) =>
     tab === "active"
       ? ACTIVE_STATUSES.has(market.status)
       : tab === "claimable"
@@ -383,15 +535,20 @@ function PortfolioPage() {
             Connect Wallet
           </Button>
         </div>
-      ) : marketsQuery.isError || positionsError ? (
+      ) : marketsQuery.isError ||
+        positionsError ||
+        energyMarketsQuery.isError ||
+        energyPositionsError ? (
         <div className="mt-8">
           <CrownErrorState
             title="Unable to load Crown portfolio"
-            message="We couldn't read the latest markets and positions from GenLayer Bradbury."
+            message="We couldn't read the latest markets and positions from GenLayer Studio Next."
             onRetry={retryPortfolio}
           />
         </div>
-      ) : positionsLoading ? (
+      ) : positionsLoading ||
+        energyMarketsQuery.isLoading ||
+        energyPositionsLoading ? (
         <div className="surface mt-8 flex items-center justify-center p-12 text-sm text-muted-foreground">
           Loading your Crown positions…
         </div>
@@ -401,25 +558,25 @@ function PortfolioPage() {
             <StatCard
               icon={CircleDollarSign}
               label="Total Staked"
-              value={formatCrownGen(totals.totalStaked)}
-              detail="Across the loaded Crown page"
+              value={formatCrownGen(combinedTotals.totalStaked)}
+              detail="Across bounded Crypto and Energy pages"
             />
             <StatCard
               icon={CircleDollarSign}
               label="Claimable"
-              value={formatCrownGen(totals.claimable)}
+              value={formatCrownGen(combinedTotals.claimable)}
               detail="Payouts and refunds available"
             />
             <StatCard
               icon={Clock3}
               label="Active Positions"
-              value={String(totals.active)}
+              value={String(combinedTotals.active)}
               detail="Open through settlement-ready"
             />
             <StatCard
               icon={History}
               label="Settled Positions"
-              value={String(totals.settled)}
+              value={String(combinedTotals.settled)}
               detail="Resolved or inconclusive"
             />
           </div>
@@ -446,7 +603,7 @@ function PortfolioPage() {
               </button>
             ))}
           </div>
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && visibleEnergyRows.length === 0 ? (
             <div className="surface mt-8 p-12 text-center">
               <Check className="mx-auto h-6 w-6 text-gold" />
               <h2 className="mt-4 text-base font-semibold">Nothing here yet</h2>
@@ -464,19 +621,39 @@ function PortfolioPage() {
               </Link>
             </div>
           ) : (
-            <div className="mt-8 grid gap-5 lg:grid-cols-2">
-              {filtered.map(({ market, position }) => (
-                <PositionCard
-                  key={market.id}
-                  market={market}
-                  position={position}
-                />
-              ))}
+            <div className="mt-8 space-y-8">
+              {filtered.length > 0 && (
+                <div className="grid gap-5 lg:grid-cols-2">
+                  {filtered.map(({ market, position }) => (
+                    <PositionCard
+                      key={`CRYPTO:${market.id}`}
+                      market={market}
+                      position={position}
+                    />
+                  ))}
+                </div>
+              )}
+              {visibleEnergyRows.length > 0 && (
+                <div>
+                  <div className="mb-3 text-xs uppercase tracking-[0.18em] text-gold">
+                    Energy positions
+                  </div>
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    {visibleEnergyRows.map(({ market, position }) => (
+                      <EnergyPositionCard
+                        key={`ENERGY:${market.id}`}
+                        market={market}
+                        position={position}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <p className="mt-6 text-xs text-muted-foreground">
-            Portfolio is intentionally bounded to the first 25 markets; Crown
-            does not enumerate user history onchain.
+            Portfolio is intentionally bounded to the first 25 markets in each
+            contract; neither contract enumerates user history onchain.
           </p>
         </>
       )}

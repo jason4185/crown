@@ -1,11 +1,7 @@
 import { createClient } from "genlayer-js";
-import {
-  CalldataAddress,
-  ExecutionResult,
-  TransactionHashVariant,
-  TransactionStatus,
-} from "genlayer-js/types";
-import type { Address, Hash } from "viem";
+import { CalldataAddress, TransactionHashVariant } from "genlayer-js/types";
+import type { SubmitInput } from "@genlayer/transaction-kit";
+import type { Address } from "viem";
 import { formatUnits, getAddress, isAddress, parseUnits } from "viem";
 
 import {
@@ -15,11 +11,10 @@ import {
   type MarketStatus,
 } from "./presentation";
 import {
-  CROWN_CONTRACT_ADDRESS,
+  requireCrownContractAddress,
+  requireCrownEnergyContractAddress,
   GENLAYER_CHAIN,
-  GENLAYER_RPC_ENDPOINT,
 } from "./config";
-import { formatCrownError } from "./errors";
 
 type RawRecord = Record<string, unknown> & {
   BTC_pool?: unknown;
@@ -219,12 +214,22 @@ export type CrownMarketPage = {
   scannedCount?: number;
 };
 
-export type TxStage =
-  "preparing" | "confirming" | "submitted" | "pending" | "success" | "failed";
+export type CrownWriteMethod =
+  | "create_market"
+  | "place_position"
+  | "settle_market"
+  | "claim"
+  | "create_up_down_market"
+  | "create_dominance_market"
+  | "place_bet"
+  | "claim_refund";
 
-export type TxProgress = {
-  stage: TxStage;
-  hash?: string;
+/** Review-safe transaction data; SDK-native values are built on confirmation. */
+export type CrownTransactionRequest = {
+  kind: "write";
+  address: `0x${string}`;
+  method: CrownWriteMethod;
+  args: string[];
 };
 
 function asRecord(value: unknown, label: string): RawRecord {
@@ -417,6 +422,7 @@ function normalizeMarket(value: unknown): CrownMarket {
   };
 
   return {
+    family: "CRYPTO",
     id: asSafeNumber(marketId, "market_id"),
     startISO: isoFromSeconds(startTimestamp, "start_timestamp"),
     endISO: isoFromSeconds(
@@ -481,6 +487,7 @@ function normalizePreview(value: unknown): CrownMarket {
     remainingPool: totalPool,
   };
   return {
+    family: "CRYPTO",
     id: asSafeNumber(marketId, "market_id"),
     startISO: isoFromSeconds(startTimestamp, "start_timestamp"),
     endISO: isoFromSeconds(
@@ -569,22 +576,27 @@ function normalizeResolution(value: unknown): CrownResolution {
 }
 
 function createReadClient() {
-  return createClient({
-    chain: GENLAYER_CHAIN as never,
-    endpoint: GENLAYER_RPC_ENDPOINT,
-  });
+  return createClient({ chain: GENLAYER_CHAIN } as Parameters<
+    typeof createClient
+  >[0]);
 }
+
+export type CrownReadState = "accepted" | "finalized";
 
 async function read(
   functionName: string,
   args: unknown[] = [],
+  state: CrownReadState = "accepted",
 ): Promise<unknown> {
   const client = createReadClient();
   return client.readContract({
-    address: CROWN_CONTRACT_ADDRESS,
+    address: requireCrownContractAddress(),
     functionName,
     args: args as never,
-    transactionHashVariant: TransactionHashVariant.LATEST_NONFINAL,
+    transactionHashVariant:
+      state === "finalized"
+        ? TransactionHashVariant.LATEST_FINAL
+        : TransactionHashVariant.LATEST_NONFINAL,
   });
 }
 
@@ -731,80 +743,59 @@ export async function getMarketByStart(startTimestamp: bigint | number) {
   };
 }
 
-function humanizeError(error: unknown): string {
-  return formatCrownError(error);
+export function crownTransaction(
+  method: CrownWriteMethod,
+  args: (bigint | number | string)[],
+): CrownTransactionRequest {
+  const address = requireCrownContractAddress();
+  return {
+    kind: "write",
+    address,
+    method,
+    args: args.map((value) => String(value)),
+  };
 }
 
-export async function writeCrownTransaction({
-  address,
-  connector,
-  functionName,
-  args = [],
-  value = 0n,
-  waitForFinality = false,
-  onProgress,
-}: {
-  address: Address;
-  connector?: { getProvider: () => Promise<unknown> } | null | undefined;
-  functionName: string;
-  args?: unknown[];
-  value?: bigint;
-  waitForFinality?: boolean;
-  onProgress?: (progress: TxProgress) => void;
-}) {
-  if (!connector) throw new Error("Connect an injected wallet first.");
-  if (!isAddress(address))
-    throw new Error("The connected wallet address is invalid.");
-  const provider = await connector.getProvider();
-  if (!provider) throw new Error("No injected wallet provider is available.");
+export function crownEnergyTransaction(
+  method: CrownWriteMethod,
+  args: (bigint | number | string)[],
+): CrownTransactionRequest {
+  return {
+    kind: "write",
+    address: requireCrownEnergyContractAddress(),
+    method,
+    args: args.map((value) => String(value)),
+  };
+}
 
-  onProgress?.({ stage: "preparing" });
-  try {
-    const client = createClient({
-      chain: GENLAYER_CHAIN as never,
-      endpoint: GENLAYER_RPC_ENDPOINT,
-      account: getAddress(address),
-      provider: provider as never,
-    });
-    onProgress?.({ stage: "confirming" });
-    const result = await client.writeContract({
-      address: CROWN_CONTRACT_ADDRESS,
-      functionName,
-      args: args as never,
-      value,
-    });
-    const hash = String(
-      typeof result === "string"
-        ? result
-        : (result?.hash ?? result?.transactionHash ?? result?.txHash ?? ""),
-    ) as unknown as Hash;
-    if (!hash.startsWith("0x"))
-      throw new Error("Crown did not return a transaction hash.");
-    onProgress?.({ stage: "submitted", hash });
-    onProgress?.({ stage: "pending", hash });
-    const receipt = await client.waitForTransactionReceipt({
-      hash: hash as never,
-      status: waitForFinality
-        ? TransactionStatus.FINALIZED
-        : TransactionStatus.ACCEPTED,
-      interval: 2000,
-      retries: 90,
-    });
-    if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-      throw new Error(
-        "Crown rejected the transaction during contract execution.",
-      );
+function u256(value: string | number | bigint): bigint {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error("Invalid unsigned integer");
     }
-    if (
-      receipt.txExecutionResultName !== ExecutionResult.FINISHED_WITH_RETURN
-    ) {
-      throw new Error("Crown transaction did not finish successfully.");
-    }
-    onProgress?.({ stage: "success", hash });
-    return { hash, receipt };
-  } catch (error) {
-    const message = humanizeError(error);
-    onProgress?.({ stage: "failed" });
-    throw new Error(message);
+    return BigInt(value);
   }
+  if (!/^\d+$/.test(value)) throw new Error("Invalid unsigned integer");
+  return BigInt(value);
+}
+
+/** Converts a review-safe Crown request into Transaction Kit RC2 input. */
+export function toSubmitInput(request: CrownTransactionRequest): SubmitInput {
+  const [first = "", second = "0"] = request.args;
+  const third = request.args[2] ?? "0";
+  const args =
+    request.method === "create_market"
+      ? [u256(first), u256(second)]
+      : request.method === "create_up_down_market" ||
+          request.method === "create_dominance_market"
+        ? [first, u256(second), u256(third)]
+        : request.method === "place_position" || request.method === "place_bet"
+          ? [u256(first), second]
+          : [u256(first)];
+  return { ...request, args } as SubmitInput;
+}
+
+export function nativeValueFromGen(amount: string): bigint {
+  return parseUnits(amount, 18);
 }

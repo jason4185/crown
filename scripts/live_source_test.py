@@ -54,18 +54,29 @@ class Public:
 
 
 def load_contract():
-    fake_gl = types.SimpleNamespace()
-    fake_gl.Contract = object
-    fake_gl.public = Public()
-    fake_gl.vm = types.SimpleNamespace(UserError=RuntimeError, Return=object)
+    fake_public = Public()
+    fake_vm = types.SimpleNamespace(UserError=RuntimeError, Return=object)
     fake = types.ModuleType("genlayer")
-    fake.__all__ = ["gl", "u256", "Address", "TreeMap"]
-    fake.gl = fake_gl
+    fake.public = fake_public
+    fake.vm = fake_vm
     fake.u256 = int
     fake.Address = Address
     fake.TreeMap = TreeMap
-    previous = sys.modules.get("genlayer")
+    fake_contract = types.ModuleType("genlayer.contract")
+    fake_contract.Contract = object
+    fake_storage = types.ModuleType("genlayer.storage")
+    fake_storage.TreeMap = TreeMap
+    fake_types = types.ModuleType("genlayer.types")
+    fake_types.Address = Address
+    fake_types.u256 = int
+    previous = {
+        name: sys.modules.get(name)
+        for name in ("genlayer", "genlayer.contract", "genlayer.storage", "genlayer.types")
+    }
     sys.modules["genlayer"] = fake
+    sys.modules["genlayer.contract"] = fake_contract
+    sys.modules["genlayer.storage"] = fake_storage
+    sys.modules["genlayer.types"] = fake_types
     try:
         spec = importlib.util.spec_from_file_location("crown_live_contract", CONTRACT_PATH)
         module = importlib.util.module_from_spec(spec)
@@ -73,10 +84,11 @@ def load_contract():
         spec.loader.exec_module(module)
         return module
     finally:
-        if previous is None:
-            sys.modules.pop("genlayer", None)
-        else:
-            sys.modules["genlayer"] = previous
+        for name, module in previous.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 CONTRACT = load_contract()

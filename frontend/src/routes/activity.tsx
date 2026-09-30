@@ -25,6 +25,14 @@ import {
 import { fmtUtcMarketWindow } from "@/lib/crown/presentation";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
+import {
+  energyOutcomeLabel,
+  formatEnergyGen,
+  getEnergyMarketsPage,
+  getEnergyPosition,
+  type EnergyMarket,
+  type EnergyPosition,
+} from "@/lib/crown/energy";
 
 export const Route = createFileRoute("/activity")({
   head: () => ({
@@ -81,7 +89,7 @@ function ActivityPositionCard({ market, position }: PositionRow) {
     <article className="surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-muted-foreground">Crown market</div>
+          <div className="text-xs text-muted-foreground">Crypto market</div>
           <div className="tabular mt-1 text-sm">
             {fmtUtcMarketWindow(market.startISO, market.endISO)}
           </div>
@@ -146,12 +154,80 @@ function ActivityPositionCard({ market, position }: PositionRow) {
   );
 }
 
+function EnergyActivityCard({
+  market,
+  position,
+}: {
+  market: EnergyMarket;
+  position: EnergyPosition;
+}) {
+  const settled =
+    market.status === "RESOLVED" || market.status === "INCONCLUSIVE";
+  return (
+    <article className="surface p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs text-gold">Energy · {market.marketType}</div>
+          <div className="tabular mt-1 text-sm">
+            {fmtUtcMarketWindow(market.startISO, market.endISO)}
+          </div>
+        </div>
+        <StatusBadge status={market.status} />
+      </div>
+      <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+        <div>
+          <span className="text-muted-foreground">Outcome</span>
+          <div className="font-medium">
+            {energyOutcomeLabel(position.selectedOutcome ?? "—")}
+          </div>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Stake</span>
+          <div className="tabular font-medium">
+            {formatEnergyGen(position.stake)}
+          </div>
+        </div>
+        <div>
+          <span className="text-muted-foreground">State</span>
+          <div>
+            {settled
+              ? market.status === "INCONCLUSIVE"
+                ? "Refundable"
+                : position.positionWon
+                  ? "Won"
+                  : "Lost"
+              : "Pending"}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-xs">
+        <span className="text-muted-foreground">
+          {position.claimAvailable
+            ? position.refundAvailable
+              ? "Refund available"
+              : "Payout available"
+            : position.claimed || position.refunded
+              ? "Claimed"
+              : "No claim available"}
+        </span>
+        <Link
+          to="/energy/$id"
+          params={{ id: String(market.id) }}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-elevated px-3 py-2 font-medium hover:border-gold/45 hover:text-gold"
+        >
+          View Energy Market <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </article>
+  );
+}
+
 function CreatedMarketCard({ market }: { market: CrownMarket }) {
   return (
     <article className="surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-muted-foreground">Crown market</div>
+          <div className="text-xs text-muted-foreground">Crypto market</div>
           <div className="tabular mt-1 text-sm">
             {fmtUtcMarketWindow(market.startISO, market.endISO)}
           </div>
@@ -223,6 +299,26 @@ function ActivityPage() {
       staleTime: 10_000,
     })),
   });
+  const energyMarketsQuery = useInfiniteQuery({
+    queryKey: ["crown", "energy", "activity-markets", address],
+    queryFn: ({ pageParam }) => getEnergyMarketsPage(pageParam, 25),
+    initialPageParam: 0,
+    getNextPageParam: (page) => (page.hasMore ? page.nextOffset : undefined),
+    enabled: Boolean(address),
+    staleTime: 15_000,
+  });
+  const energyMarketPreviews = useMemo(
+    () => energyMarketsQuery.data?.pages.flatMap((page) => page.markets) ?? [],
+    [energyMarketsQuery.data],
+  );
+  const energyPositionQueries = useQueries({
+    queries: energyMarketPreviews.map((market) => ({
+      queryKey: ["crown", "energy", "position", market.id, address],
+      queryFn: () => getEnergyPosition(market.id, address!),
+      enabled: Boolean(address),
+      staleTime: 10_000,
+    })),
+  });
   const detailedMarkets = marketPreviews.map(
     (_, index) => marketQueries[index]?.data ?? null,
   );
@@ -241,14 +337,30 @@ function ActivityPage() {
     ({ market }) =>
       market.status === "RESOLVED" || market.status === "INCONCLUSIVE",
   );
+  const energyPositions = energyMarketPreviews.flatMap((market, index) => {
+    const position = energyPositionQueries[index]?.data;
+    return position?.hasPosition ? [{ market, position }] : [];
+  });
+  const energySettled = energyPositions.filter(
+    ({ market }) =>
+      market.status === "RESOLVED" || market.status === "INCONCLUSIVE",
+  );
   const queryError =
     marketsQuery.isError ||
     marketQueries.some((query) => query.isError) ||
     positionQueries.some((query) => query.isError);
+  const allQueryError =
+    queryError ||
+    energyMarketsQuery.isError ||
+    energyPositionQueries.some((query) => query.isError);
   const loading =
     marketsQuery.isLoading ||
     marketQueries.some((query) => query.isLoading) ||
     positionQueries.some((query) => query.isLoading);
+  const allLoading =
+    loading ||
+    energyMarketsQuery.isLoading ||
+    energyPositionQueries.some((query) => query.isLoading);
   const visibleRows =
     tab === "positions" ? positions : tab === "settled" ? settled : [];
   const retryActivity = () => {
@@ -256,6 +368,8 @@ function ActivityPage() {
       marketsQuery.refetch(),
       ...marketQueries.map((query) => query.refetch()),
       ...positionQueries.map((query) => query.refetch()),
+      energyMarketsQuery.refetch(),
+      ...energyPositionQueries.map((query) => query.refetch()),
     ]);
   };
 
@@ -315,16 +429,16 @@ function ActivityPage() {
         {(
           [
             ["positions", "Positions"],
-            ["created", "Created Markets"],
+            ["created", "Created Crypto Markets"],
             ["settled", "Settled"],
           ] as const
         ).map(([key, label]) => {
           const count =
             key === "positions"
-              ? positions.length
+              ? positions.length + energyPositions.length
               : key === "created"
                 ? createdMarkets.length
-                : settled.length;
+                : settled.length + energySettled.length;
           return (
             <button
               key={key}
@@ -346,22 +460,24 @@ function ActivityPage() {
         })}
       </div>
 
-      {loading ? (
+      {allLoading ? (
         <div className="surface mt-8 flex items-center justify-center gap-2 p-12 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading Crown activity…
         </div>
-      ) : queryError ? (
+      ) : allQueryError ? (
         <div className="mt-8">
           <CrownErrorState
             title="Unable to load Crown activity"
-            message="We couldn't read the latest markets and positions from GenLayer Bradbury."
+            message="We couldn't read the latest markets and positions from GenLayer Studio Next."
             onRetry={retryActivity}
           />
         </div>
       ) : tab === "created" ? (
         createdMarkets.length === 0 ? (
           <div className="surface mt-8 p-12 text-center text-sm text-muted-foreground">
-            No Crown markets created by this wallet in the loaded markets.
+            No Crypto markets created by this wallet in the loaded markets.
+            Energy market views do not expose a creator field, so this page does
+            not guess Energy creation history.
           </div>
         ) : (
           <div className="mt-8 space-y-4">
@@ -370,7 +486,10 @@ function ActivityPage() {
             ))}
           </div>
         )
-      ) : visibleRows.length === 0 ? (
+      ) : visibleRows.length === 0 &&
+        (tab === "settled"
+          ? energySettled.length === 0
+          : energyPositions.length === 0) ? (
         <div className="surface mt-8 p-12 text-center text-sm text-muted-foreground">
           {tab === "settled"
             ? "No settled Crown positions in the loaded markets."
@@ -380,11 +499,20 @@ function ActivityPage() {
         <div className="mt-8 space-y-4">
           {visibleRows.map(({ market, position }) => (
             <ActivityPositionCard
-              key={market.id}
+              key={`CRYPTO:${market.id}`}
               market={market}
               position={position}
             />
           ))}
+          {(tab === "positions" ? energyPositions : energySettled).map(
+            ({ market, position }) => (
+              <EnergyActivityCard
+                key={`ENERGY:${market.id}`}
+                market={market}
+                position={position}
+              />
+            ),
+          )}
         </div>
       )}
 

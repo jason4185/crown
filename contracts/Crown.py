@@ -1,4 +1,4 @@
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 
 """Crown: a permissionless five-asset relative-performance market.
 
@@ -9,7 +9,10 @@ stored: only the bounded, normalized settlement proof is persisted.
 import json
 import typing
 
-from genlayer import *
+import genlayer as gl
+from genlayer.contract import Contract
+from genlayer.storage import TreeMap
+from genlayer.types import Address, u256
 
 
 GEN = u256(10**18)
@@ -434,7 +437,7 @@ def _common_valid_votes(first: typing.Any, second: typing.Any, winner: str) -> i
     return count
 
 
-class Crown(gl.Contract):
+class Crown(Contract):
     market_count: u256
     market_records: TreeMap[str, str]
     market_identity: TreeMap[str, u256]
@@ -562,10 +565,21 @@ class Crown(gl.Contract):
     def _empty_resolution(self) -> dict[str, typing.Any]:
         return self._resolution_from(_empty_proposal(), RESOLUTION_UNRESOLVED, "")
 
-    def _settlement_proposal(self, market: dict[str, typing.Any]) -> dict[str, typing.Any]:
-        start = self._stored_int(market["performance_start_timestamp"])
-        end = self._stored_int(market["performance_end_timestamp"])
-        duration = self._stored_int(market["duration"])
+    def _settlement_proposal(
+        self,
+        start: typing.Any,
+        end: typing.Optional[int] = None,
+        duration: typing.Optional[int] = None,
+    ) -> dict[str, typing.Any]:
+        # Keep the old private helper shape available to local fixtures while
+        # freezing its storage-derived values before either callback runs.
+        if isinstance(start, dict):
+            market = start
+            start = self._stored_int(market["performance_start_timestamp"])
+            end = self._stored_int(market["performance_end_timestamp"])
+            duration = self._stored_int(market["duration"])
+        if end is None or duration is None:
+            _fail("invalid settlement inputs")
 
         def leader() -> dict[str, typing.Any]:
             return _collect_sources(start, end, duration)
@@ -592,6 +606,8 @@ class Crown(gl.Contract):
             # a retryable unavailable provider.
             return _proposal_has_unavailable(leaders_result.calldata) == _proposal_has_unavailable(other)
 
+        # ``run_nondet`` is the linter-recognized Studio Next equivalence
+        # entry point; settlement catches its VM/consensus failure as before.
         return gl.vm.run_nondet(leader, validator)
 
     @gl.public.write
@@ -700,8 +716,17 @@ class Crown(gl.Contract):
             market["settlement"] = self._resolution_from(proposal, RESOLUTION_INCONCLUSIVE, "")
             self._save_market(market_id, market)
             return
+        # Freeze all deterministic inputs before entering nondeterministic
+        # execution.  Neither leader nor validator reads mutable storage.
+        start = self._stored_int(market["performance_start_timestamp"])
+        end = self._stored_int(market["performance_end_timestamp"])
+        duration = self._stored_int(market["duration"])
+        pools = {
+            asset: self._stored_int(market[asset + "_pool"])
+            for asset in ASSETS
+        }
         try:
-            proposal = self._settlement_proposal(market)
+            proposal = self._settlement_proposal(start, end, duration)
         except Exception:
             # A transient validator disagreement must not brick a market.  It
             # remains retryable before the deadline; after the deadline there
@@ -715,7 +740,7 @@ class Crown(gl.Contract):
             self._save_market(market_id, market)
             return
         candidate = proposal["consensus_winner"]
-        winning_pool = self._stored_int(market.get(candidate + "_pool", "0")) if candidate in ASSETS else 0
+        winning_pool = pools.get(candidate, 0) if candidate in ASSETS else 0
         if candidate in ASSETS and proposal["consensus_count"] >= 2 and winning_pool > 0:
             status = RESOLUTION_RESOLVED
             winner = candidate
@@ -880,7 +905,10 @@ class Crown(gl.Contract):
         cursor = int(offset)
         if cursor > total:
             cursor = total
-        count = min(requested, total - cursor)
+        if cursor >= total:
+            return {"market_ids": [], "markets": [], "next_offset": cursor, "has_more": False}
+        remaining = total - cursor
+        count = requested if requested < remaining else remaining
         now = int(self._now())
         ids: list[int] = []
         previews: list[dict] = []
@@ -899,7 +927,16 @@ class Crown(gl.Contract):
         cursor = int(offset)
         if cursor > total:
             cursor = total
-        scan = min(MAX_OPEN_SCAN, total - cursor)
+        if cursor >= total:
+            return {
+                "market_ids": [],
+                "markets": [],
+                "next_offset": cursor,
+                "has_more": False,
+                "scanned_count": 0,
+            }
+        remaining = total - cursor
+        scan = MAX_OPEN_SCAN if MAX_OPEN_SCAN < remaining else remaining
         now = int(self._now())
         ids: list[int] = []
         previews: list[dict] = []

@@ -30,7 +30,7 @@ function NetworkPill({
           wrongNetwork ? "bg-warning" : "bg-success",
         )}
       />
-      {wrongNetwork ? "Switch to GenLayer Bradbury" : GENLAYER_NETWORK_NAME}
+      {wrongNetwork ? "Switch to GenLayer Studio Next" : GENLAYER_NETWORK_NAME}
     </span>
   );
   return wrongNetwork && onClick ? (
@@ -138,7 +138,7 @@ export function Header() {
             action="/markets"
             method="get"
             className="relative hidden xl:block"
-            title="Search loaded markets by date, UTC window, or status"
+            title="Search loaded Crypto and Energy markets by asset, type, date, UTC window, or status"
           >
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

@@ -11,11 +11,13 @@ const KNOWN_TITLES = [
   "Invalid market window",
   "Stake too small",
   "Stake limit reached",
+  "Energy stake limit reached",
   "Your asset is locked",
   "Predictions are closed",
   "Settlement is not ready",
   "Already claimed",
   "Nothing to claim",
+  "Refund unavailable",
   "Network request failed",
 ] as const;
 
@@ -46,7 +48,7 @@ export function getCrownErrorCopy(error: unknown): CrownErrorCopy {
   if (/wrong chain|wrong network|unsupported chain|chain mismatch/i.test(raw)) {
     return {
       title: "Wrong network",
-      message: "Switch to GenLayer Bradbury to continue.",
+      message: "Switch to GenLayer Studio Next to continue.",
     };
   }
   if (/duplicate market|already exists/i.test(raw)) {
@@ -72,6 +74,12 @@ export function getCrownErrorCopy(error: unknown): CrownErrorCopy {
       raw,
     )
   ) {
+    if (/1h|2h|energy/i.test(raw)) {
+      return {
+        title: "Invalid Energy market window",
+        message: "Energy markets must use an aligned 1H or 2H UTC window.",
+      };
+    }
     return {
       title: "Invalid market window",
       message: "Crown markets must use an exact canonical 4-hour UTC window.",
@@ -84,6 +92,12 @@ export function getCrownErrorCopy(error: unknown): CrownErrorCopy {
     };
   }
   if (/maximum cumulative|maximum stake|stake limit|cap/i.test(raw)) {
+    if (/40\s*gen/i.test(raw)) {
+      return {
+        title: "Energy stake limit reached",
+        message: "You can stake a maximum of 40 GEN in this Energy market.",
+      };
+    }
     return {
       title: "Stake limit reached",
       message: "You can stake a maximum of 10 GEN in this market.",
@@ -118,6 +132,12 @@ export function getCrownErrorCopy(error: unknown): CrownErrorCopy {
       message: "This position has already been claimed.",
     };
   }
+  if (/market is not refundable|not refundable/i.test(raw)) {
+    return {
+      title: "Refund unavailable",
+      message: "This Energy market is not currently refundable.",
+    };
+  }
   if (/nothing claimable|nothing to claim/i.test(raw)) {
     return {
       title: "Nothing to claim",
@@ -143,7 +163,7 @@ export function getCrownErrorCopy(error: unknown): CrownErrorCopy {
   return {
     title: "Network request failed",
     message:
-      "We couldn't complete the request on GenLayer Bradbury. Please try again.",
+      "We couldn't complete the request on GenLayer Studio Next. Please try again.",
   };
 }
 

@@ -6,7 +6,7 @@ import { createConfig, http, injected, WagmiProvider } from "wagmi";
 import { GENLAYER_CHAIN, GENLAYER_RPC_ENDPOINT } from "./config";
 
 export const wagmiConfig = createConfig({
-  chains: [GENLAYER_CHAIN],
+  chains: [GENLAYER_CHAIN as never],
   connectors: [
     injected({
       shimDisconnect: true,

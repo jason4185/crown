@@ -6,6 +6,10 @@ highest percentage return over the same exact 4-hour UTC window. Anyone can
 create a valid future market, users stake GEN pari-mutuel style, and settlement
 uses independent data from multiple exchange sources.
 
+Crown now also includes a separate Energy intelligent contract in the same
+product. Energy markets cover WTI crude, Brent crude, and natural gas through
+Up/Down and Energy Dominance markets with exact 1-hour and 2-hour windows.
+
 **Live Demo:** [crown-teal.vercel.app](https://crown-teal.vercel.app/)
 
 ## Vision
@@ -191,10 +195,11 @@ Claims are recorded by the contract and cannot be claimed twice.
 
 ## Frontend
 
-The frontend is a React/TypeScript application for GenLayer Bradbury. It uses
-RainbowKit with injected wallets for connection and reads market state from the
-Crown contract. The contract remains the source of truth for market status,
-pools, positions, settlement, and claims.
+The frontend is a React/TypeScript application for GenLayer Studio Next. It
+uses RainbowKit with injected wallets for connection, genlayer-js 2.0.0-rc.1
+for contract reads, and Transaction Kit RC2 for fee-aware writes. The contract
+remains the source of truth for market status, pools, positions, settlement,
+and claims.
 
 The Binance live chart is informational only. It is a presentation view and
 does not determine the result. Contract settlement still uses Binance, Bitget,
@@ -214,6 +219,23 @@ Open the local Vite URL, normally `http://localhost:5173`.
 
 ## Network
 
-- Network: GenLayer Bradbury Testnet
-- Chain ID: `4221`
-- Crown contract: `0x243adf9cacA6621D4dabCA95F5c5c80C6c1489ac`
+- Network: GenLayer Studio Next / Studio-dev preview
+- Chain ID: `61997`
+- RPC: `https://studio-next.genlayer.com/api`
+- Explorer: `https://explorer-studio-dev.genlayer.com/`
+- Crypto Crown contract: `0x7180CEEd2aa3EF8259A3eA5E88a4Bad4513b78CE`
+- Crown Energy contract: `0x03EbF39d511809bDcEC74F3740260dc5E136F46f`
+
+## Milestone Upgrade
+
+The accepted Crown baseline was a Bradbury crypto-only deployment with 4-hour
+relative-performance markets. The current milestone migrates Crown to Studio
+Next, uses Transaction Kit RC2, adds a separate Energy intelligent contract,
+and unifies Crypto and Energy markets in one frontend. Energy is part of Crown,
+not a separate Fuse product.
+
+Current market families:
+
+- **Crypto:** BTC, ETH, SOL, BNB, and XRP relative performance over 4 hours.
+- **Energy:** WTI crude, Brent crude, and natural gas with Up/Down and Energy
+  Dominance markets over 1-hour or 2-hour windows.

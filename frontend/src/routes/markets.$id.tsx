@@ -419,7 +419,7 @@ function MarketDetail() {
           message={
             notFound
               ? "This Crown market could not be found on the connected network."
-              : "We couldn't read the latest market state from GenLayer Bradbury."
+              : "We couldn't read the latest market state from GenLayer Studio Next."
           }
           onRetry={!notFound ? () => void marketQuery.refetch() : undefined}
           onSecondary={() =>

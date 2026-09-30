@@ -8,6 +8,8 @@ export type CrownSlot = {
   endTimestamp: number;
 };
 
+export type EnergySlot = CrownSlot;
+
 function pad(value: number) {
   return String(value).padStart(2, "0");
 }
@@ -59,5 +61,17 @@ export function buildCanonicalSlots(
       startTimestamp,
       endTimestamp: startTimestamp + durationSeconds,
     };
+  });
+}
+
+export function buildEnergySlots(
+  dateKey: string,
+  durationSeconds: 3600 | 7200,
+): EnergySlot[] {
+  const dateStart = timestampFromDateKey(dateKey);
+  const count = 86_400 / durationSeconds;
+  return Array.from({ length: count }, (_, index) => {
+    const startTimestamp = dateStart + index * durationSeconds;
+    return { startTimestamp, endTimestamp: startTimestamp + durationSeconds };
   });
 }

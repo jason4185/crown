@@ -14,6 +14,7 @@ import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as CreateRouteImport } from './routes/create'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as EnergyIdRouteImport } from './routes/energy.$id'
 import { Route as MarketsIndexRouteImport } from './routes/markets.index'
 import { Route as MarketsIdRouteImport } from './routes/markets.$id'
 
@@ -42,6 +43,11 @@ const PortfolioRoute = PortfolioRouteImport.update({
   path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EnergyIdRoute = EnergyIdRouteImport.update({
+  id: '/energy/$id',
+  path: '/energy/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MarketsIndexRoute = MarketsIndexRouteImport.update({
   id: '/markets/',
   path: '/markets/',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/portfolio': typeof PortfolioRoute
+  '/energy/$id': typeof EnergyIdRoute
   '/markets/$id': typeof MarketsIdRoute
   '/markets/': typeof MarketsIndexRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/portfolio': typeof PortfolioRoute
+  '/energy/$id': typeof EnergyIdRoute
   '/markets/$id': typeof MarketsIdRoute
   '/markets': typeof MarketsIndexRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/create': typeof CreateRoute
   '/how-it-works': typeof HowItWorksRoute
   '/portfolio': typeof PortfolioRoute
+  '/energy/$id': typeof EnergyIdRoute
   '/markets/$id': typeof MarketsIdRoute
   '/markets/': typeof MarketsIndexRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/how-it-works'
     | '/portfolio'
+    | '/energy/$id'
     | '/markets/$id'
     | '/markets/'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/how-it-works'
     | '/portfolio'
+    | '/energy/$id'
     | '/markets/$id'
     | '/markets'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/how-it-works'
     | '/portfolio'
+    | '/energy/$id'
     | '/markets/$id'
     | '/markets/'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   CreateRoute: typeof CreateRoute
   HowItWorksRoute: typeof HowItWorksRoute
   PortfolioRoute: typeof PortfolioRoute
+  EnergyIdRoute: typeof EnergyIdRoute
   MarketsIdRoute: typeof MarketsIdRoute
   MarketsIndexRoute: typeof MarketsIndexRoute
 }
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/energy/$id': {
+      id: '/energy/$id'
+      path: '/energy/$id'
+      fullPath: '/energy/$id'
+      preLoaderRoute: typeof EnergyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/markets/': {
       id: '/markets/'
       path: '/markets'
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   CreateRoute: CreateRoute,
   HowItWorksRoute: HowItWorksRoute,
   PortfolioRoute: PortfolioRoute,
+  EnergyIdRoute: EnergyIdRoute,
   MarketsIdRoute: MarketsIdRoute,
   MarketsIndexRoute: MarketsIndexRoute,
 }

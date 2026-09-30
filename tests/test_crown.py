@@ -80,6 +80,14 @@ class FakeVM:
             raise ConsensusError("proposal mismatch")
         return proposal
 
+    def run_nondet_default(self, leader, validator, catch_vm_error=False):
+        try:
+            return self.run_nondet(leader, validator)
+        except Exception:
+            if catch_vm_error:
+                raise
+            raise
+
 
 class Public:
     @staticmethod
@@ -105,11 +113,26 @@ def load_contract_module():
     fake = types.ModuleType("genlayer")
     fake.__all__ = ["gl", "u256", "Address", "TreeMap"]
     fake.gl = fake_gl
+    fake.public = fake_gl.public
+    fake.vm = fake_gl.vm
     fake.u256 = int
     fake.Address = Address
     fake.TreeMap = TreeMap
-    previous = sys.modules.get("genlayer")
+    fake_contract = types.ModuleType("genlayer.contract")
+    fake_contract.Contract = object
+    fake_storage = types.ModuleType("genlayer.storage")
+    fake_storage.TreeMap = TreeMap
+    fake_types = types.ModuleType("genlayer.types")
+    fake_types.Address = Address
+    fake_types.u256 = int
+    previous = {
+        name: sys.modules.get(name)
+        for name in ("genlayer", "genlayer.contract", "genlayer.storage", "genlayer.types")
+    }
     sys.modules["genlayer"] = fake
+    sys.modules["genlayer.contract"] = fake_contract
+    sys.modules["genlayer.storage"] = fake_storage
+    sys.modules["genlayer.types"] = fake_types
     try:
         spec = importlib.util.spec_from_file_location("crown_test_contract", CONTRACT_PATH)
         module = importlib.util.module_from_spec(spec)
@@ -117,10 +140,11 @@ def load_contract_module():
         spec.loader.exec_module(module)
         return module
     finally:
-        if previous is None:
-            sys.modules.pop("genlayer", None)
-        else:
-            sys.modules["genlayer"] = previous
+        for name, module in previous.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 CONTRACT = load_contract_module()
@@ -654,6 +678,60 @@ def test_empty_market_is_inconclusive_without_source_calls():
     assert h.web.calls == []
 
 
+def test_empty_pagination_pages_do_not_require_transaction_datetime():
+    h = Harness()
+    h.gl.message_raw = {}
+    assert h.contract.get_markets(0, 25) == {
+        "market_ids": [],
+        "markets": [],
+        "next_offset": 0,
+        "has_more": False,
+    }
+    assert h.contract.get_open_markets(0, 25) == {
+        "market_ids": [],
+        "markets": [],
+        "next_offset": 0,
+        "has_more": False,
+        "scanned_count": 0,
+    }
+
+
+def test_one_market_pagination_page():
+    h = Harness()
+    h.create()
+    assert h.contract.get_markets(0, 25)["market_ids"] == [1]
+    assert h.contract.get_markets(1, 25) == {
+        "market_ids": [],
+        "markets": [],
+        "next_offset": 1,
+        "has_more": False,
+    }
+
+
+def test_pagination_page_and_open_scan_caps_are_preserved():
+    h = Harness()
+    for index in range(26):
+        h.create(start=START + (index * 86400))
+    page = h.contract.get_markets(0, 26)
+    assert page["market_ids"] == list(range(1, 26))
+    assert page["next_offset"] == 25
+    assert page["has_more"] is True
+
+    h = Harness()
+    for index in range(101):
+        h.create(start=START + (index * 86400))
+    h.time("2026-04-11T01:00:00Z")
+    capped = h.contract.get_open_markets(0, 25)
+    assert capped["market_ids"] == []
+    assert capped["next_offset"] == 100
+    assert capped["has_more"] is True
+    assert capped["scanned_count"] == 100
+    continued = h.contract.get_open_markets(100, 25)
+    assert continued["market_ids"] == [101]
+    assert continued["next_offset"] == 101
+    assert continued["has_more"] is False
+
+
 def test_read_methods_and_bounded_sparse_pagination():
     h = Harness()
     h.create(start=START)
@@ -665,8 +743,34 @@ def test_read_methods_and_bounded_sparse_pagination():
     open_page = h.contract.get_open_markets(0, 2)
     assert open_page["market_ids"] == [1, 2]
     assert open_page["scanned_count"] == 2
-    assert h.contract.get_open_markets(3, 25)["market_ids"] == []
+    assert h.contract.get_markets(3, 25) == {
+        "market_ids": [],
+        "markets": [],
+        "next_offset": 3,
+        "has_more": False,
+    }
+    assert h.contract.get_markets(99, 25) == {
+        "market_ids": [],
+        "markets": [],
+        "next_offset": 3,
+        "has_more": False,
+    }
+    assert h.contract.get_open_markets(3, 25) == {
+        "market_ids": [],
+        "markets": [],
+        "next_offset": 3,
+        "has_more": False,
+        "scanned_count": 0,
+    }
+    assert h.contract.get_open_markets(99, 25) == {
+        "market_ids": [],
+        "markets": [],
+        "next_offset": 3,
+        "has_more": False,
+        "scanned_count": 0,
+    }
     expect_error(lambda: h.contract.get_markets(0, 0), "limit")
+    expect_error(lambda: h.contract.get_open_markets(0, 0), "limit")
 
 
 def test_open_market_pagination_handles_expired_sparse_ids():
