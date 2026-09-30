@@ -172,6 +172,17 @@ function CryptoCreateMarket() {
       ? selectedLookup.data.marketId
       : undefined);
   const lookupError = lookupQueries.some((query) => query.isError);
+  const slotsChecking = states.some((state) => state === "CHECKING");
+  const hasAvailableSlot = states.some((state) => state === "AVAILABLE");
+  const noCreatableWindows =
+    nowSeconds !== null &&
+    !slotsChecking &&
+    !hasAvailableSlot &&
+    !lookupError &&
+    !states.includes("ERROR");
+  const nextDateKey = dateKeyFromTimestamp(
+    timestampFromDateKey(dateKey) + 86_400,
+  );
   const duration = config?.durationSeconds ?? CROWN_DURATION_SECONDS;
   const bettingCloseLead = config?.bettingCloseLeadSeconds ?? 60;
   const settlementGrace = config?.settlementGraceSeconds ?? 60;
@@ -424,6 +435,30 @@ function CryptoCreateMarket() {
               One or more windows could not be verified. Retry the affected
               slot.
             </p>
+          ) : null}
+          {noCreatableWindows ? (
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-elevated/60 p-4 text-sm">
+              <p className="text-muted-foreground">
+                No more Crypto Crown windows are available for this UTC date.
+                Choose a future date.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDateKey(nextDateKey);
+                  setSelectedStart(null);
+                  setCreatedMarketId(null);
+                }}
+                className="shrink-0 rounded-md border border-border-strong px-3 py-2 text-xs font-medium hover:border-gold/45 hover:text-gold"
+              >
+                Choose{" "}
+                {fmtUtcDate(
+                  new Date(
+                    timestampFromDateKey(nextDateKey) * 1000,
+                  ).toISOString(),
+                )}
+              </button>
+            </div>
           ) : null}
           {existingMarketId ? (
             <div className="mt-8 flex flex-wrap items-center gap-3">
