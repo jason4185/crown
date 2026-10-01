@@ -2,6 +2,11 @@
 @source "../src";
 @import "tw-animate-css";
 
+/* Match VANTA's production RC2 panel treatment while keeping Crown's UI. */
+.crown-transaction-kit .gltk-timeline .gltk-node:last-child {
+  display: none;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*

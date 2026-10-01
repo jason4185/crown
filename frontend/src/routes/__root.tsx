@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { Header } from "@/components/crown/Header";
 import { CrownWalletProvider } from "@/lib/crown/wallet";
 import appCss from "../styles.css?url";
+import "@genlayer/transaction-kit-react/styles.css";
 
 function NotFoundComponent() {
   return (

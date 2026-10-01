@@ -37,6 +37,11 @@ type TxState =
   | "Accepted"
   | "Failed";
 
+type TransactionSession = {
+  title: string;
+  details: Array<[string, string]>;
+};
+
 function stateFromStatus(status: TrackedStatus): TxState {
   const name = status.statusName?.toUpperCase();
   if (name === "ACCEPTED" || name === "FINALIZED") {
@@ -83,6 +88,7 @@ export function TransactionDialog({
   const [state, setState] = useState<TxState>("Review");
   const [status, setStatus] = useState<TrackedStatus | null>(null);
   const wasOpen = useRef(false);
+  const session = useRef<TransactionSession | null>(null);
   const sdkTx = useRef<SubmitInput | null>(null);
   const sdkValue = useRef<bigint | undefined>(undefined);
 
@@ -91,12 +97,14 @@ export function TransactionDialog({
       wasOpen.current = true;
       setState("Review");
       setStatus(null);
+      session.current = null;
       sdkTx.current = null;
       sdkValue.current = undefined;
     } else if (!open) {
       wasOpen.current = false;
       setState("Review");
       setStatus(null);
+      session.current = null;
       sdkTx.current = null;
       sdkValue.current = undefined;
     }
@@ -111,13 +119,17 @@ export function TransactionDialog({
   };
 
   const confirm = () => {
-    if (!kit || !tx || sdkTx.current) return;
+    if (!kit || !tx || session.current || sdkTx.current) return;
     try {
       sdkTx.current = toSubmitInput(tx);
       sdkValue.current =
         userValueGen === undefined
           ? undefined
           : nativeValueFromGen(userValueGen);
+      session.current = {
+        title,
+        details: details.map(([label, value]) => [label, value]),
+      };
       setState("Awaiting wallet");
     } catch (cause) {
       const failed: TrackedStatus = {
@@ -219,12 +231,19 @@ export function TransactionDialog({
                 </p>
               ) : null}
               <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                >
                   Cancel
                 </Button>
                 <Button
+                  type="button"
                   onClick={confirm}
-                  disabled={!kit || !tx || Boolean(sdkTx.current)}
+                  disabled={
+                    !kit || !tx || Boolean(session.current || sdkTx.current)
+                  }
                 >
                   Confirm transaction
                 </Button>
@@ -232,7 +251,7 @@ export function TransactionDialog({
             </div>
           )}
           {running && kit && sdkTx.current && (
-            <div className="w-full">
+            <div className="crown-transaction-kit w-full">
               <GenLayerTransactionPanel
                 kit={kit}
                 tx={sdkTx.current}
@@ -247,12 +266,20 @@ export function TransactionDialog({
             </div>
           )}
           {state === "Accepted" && (
-            <Button className="w-full" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => onOpenChange(false)}
+            >
               Done
             </Button>
           )}
           {state === "Failed" && (
-            <Button className="w-full" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => onOpenChange(false)}
+            >
               Close
             </Button>
           )}
