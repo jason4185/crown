@@ -184,11 +184,17 @@ class Harness:
         self.vm = FakeVM()
         self.web = FakeWeb()
         self.transfers = []
+        message_raw = {"datetime": "2026-01-01T00:00:00Z"}
+        message = types.SimpleNamespace(
+            sender_address=Address(sender),
+            value=0,
+            raw=message_raw,
+        )
         self.gl = types.SimpleNamespace(
             vm=self.vm,
             nondet=types.SimpleNamespace(web=self.web),
-            message=types.SimpleNamespace(sender_address=Address(sender), value=0),
-            message_raw={"datetime": "2026-01-01T00:00:00Z"},
+            message=message,
+            message_raw=message_raw,
         )
         self.gl.get_contract_at = lambda user: types.SimpleNamespace(
             emit_transfer=lambda **kwargs: self.transfers.append((user.as_hex, kwargs))
@@ -305,6 +311,21 @@ def test_protocol_config_is_fixed_and_complete():
     assert config["duration"] == 14400
     assert config["settlement_retry_window_seconds"] == 1800
     assert config["source_strategy"] == "NATIVE_4H_CANDLES"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "2026-01-01T00:00:00Z",
+        "2026-01-01T00:00:00+00:00",
+        "2026-01-01T00:00:00.123456Z",
+    ],
+)
+def test_studio_next_transaction_time_uses_typed_message_raw(raw):
+    h = Harness()
+    h.gl.message.raw["datetime"] = raw
+    h.gl.message_raw = {}
+    assert h.create() == 1
 
 
 def test_permissionless_creation_and_market_detail():

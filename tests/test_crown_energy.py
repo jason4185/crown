@@ -315,6 +315,12 @@ def test_config_and_empty_pagination_do_not_require_datetime():
     assert harness.contract.get_open_markets(0, 25) == {"market_ids": [], "markets": [], "next_offset": 0, "has_more": False, "scanned_count": 0}
 
 
+def test_studio_next_transaction_time_uses_typed_message_raw():
+    harness = Harness()
+    harness.gl.message_raw = {}
+    assert harness.create_up() == 1
+
+
 def test_creation_duration_alignment_and_duplicate_protection():
     harness = Harness()
     one_hour = ((NOW // 3600) + 2) * 3600

@@ -448,7 +448,7 @@ class Crown(Contract):
 
     def _now(self) -> u256:
         try:
-            raw = gl.message_raw["datetime"]
+            raw = gl.message.raw["datetime"]
         except Exception:
             _fail("invalid transaction time")
         current = _parse_datetime(raw)
