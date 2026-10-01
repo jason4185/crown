@@ -1,213 +1,73 @@
 # Crown
 
-Crown is a permissionless 4-hour crypto relative-performance prediction market
-on GenLayer. Users predict which of BTC, ETH, SOL, BNB, or XRP will have the
-highest percentage return over the same exact 4-hour UTC window. Anyone can
-create a valid future market, users stake GEN pari-mutuel style, and settlement
-uses independent data from multiple exchange sources.
+Crown is a permissionless GenLayer prediction market with two market families:
+Crypto relative-performance markets and Energy prediction markets. Contract
+state is the source of truth for markets, positions, settlement, payouts, and
+refunds.
 
-Crown now also includes a separate Energy intelligent contract in the same
-product. Energy markets cover WTI crude, Brent crude, and natural gas through
-Up/Down and Energy Dominance markets with exact 1-hour and 2-hour windows.
+## Live
 
-**Live Demo:** [crown-teal.vercel.app](https://crown-teal.vercel.app/)
+- Live App: [crown-teal.vercel.app](https://crown-teal.vercel.app/)
+- GitHub: [github.com/jason4185/crown](https://github.com/jason4185/crown)
+- Network: GenLayer Studio Next / Studio-dev preview
+- Chain ID: `61997`
+- RPC: `https://studio-next.genlayer.com/api`
+- Explorer: [explorer-studio-dev.genlayer.com](https://explorer-studio-dev.genlayer.com/)
+- Crypto Crown contract: `0xc8B2A0d62dD42A0c8e1607994e347F2a9bf566F7`
+- Crown Energy contract: `0x03EbF39d511809bDcEC74F3740260dc5E136F46f`
 
-## Vision
+## What Crown Does
 
-Crown started from a simple observation: short-term crypto markets are rarely
-viewed in isolation. Traders compare which asset is leading, which is lagging,
-and where relative strength is emerging. Most prediction markets ask whether a
-single asset will move up or down; Crown asks which asset performs best over the
-same exact window.
+### Crypto
 
-By putting BTC, ETH, SOL, BNB, and XRP into one fixed 4-hour race, Crown turns
-relative market performance into a simple permissionless prediction market. The
-goal is transparent settlement without a trusted operator: fixed UTC windows,
-deterministic financial rules, and independent exchange data resolved through
-GenLayer consensus.
+Crypto Crown asks which of `BTC`, `ETH`, `SOL`, `BNB`, or `XRP` has the highest
+percentage return over the same exact 4-hour UTC window. Windows are aligned to
+`00:00`, `04:00`, `08:00`, `12:00`, `16:00`, and `20:00` UTC.
 
-## How Crown Works
+### Energy
 
-1. A market is created for one canonical 4-hour UTC window.
-2. Users back one asset with GEN before betting closes. Each wallet can back
-   only one asset in a market.
-3. After the window ends, the contract compares every asset's percentage return.
-4. Binance, Bitget, and Gate independently determine the top performer. At
-   least two valid sources must agree on the same asset.
-5. Winning positions share the pool pari-mutuel style. If the result is
-   inconclusive, participants claim back their original stake.
+Crown Energy supports:
 
-```mermaid
-flowchart LR
-    A[Create market] --> B[Open]
-    B --> C[Locked]
-    C --> D[Live]
-    D --> E[Finalizing]
-    E --> F[Settlement ready]
-    F --> G{Settlement}
-    G -->|Consensus| H[Resolved]
-    G -->|No safe consensus| I[Inconclusive]
-    H --> J[Claim]
-    I --> J
-```
+- Up/Down markets for WTI Crude, Brent Crude, and Natural Gas.
+- Energy Dominance markets comparing those three assets.
+- Exact 1-hour and 2-hour UTC windows.
 
-## Key Innovations
+## How Settlement Works
 
-- **Relative-performance markets:** Five assets compete over one exact UTC
-  window; the outcome is the highest percentage return, not an isolated Up/Down
-  call.
-- **Canonical 4-hour windows:** Every market uses a fixed UTC-aligned candle
-  boundary, so all assets share the same start and end conditions.
-- **Multi-source settlement:** Binance, Bitget, and Gate independently evaluate
-  native 4-hour candles. At least two of three valid sources must agree.
-- **Permissionless lifecycle:** Anyone can create a valid market or request
-  settlement when ready; users claim their own payout or refund directly.
-- **Bounded uncertainty handling:** Temporary source outages can keep settlement
-  retryable, while insufficient evidence ultimately becomes `INCONCLUSIVE` and
-  enables refunds.
+Crypto settlement uses one exact native 4-hour candle per asset from Binance,
+Bitget, and Gate. Energy settlement uses the configured Binance, Gate, and
+Bitget source adapters, with exact 1-hour data and the protocol's proven
+two-candle 1-hour aggregation path for 2-hour markets. Both families require
+2-of-3 valid source agreement.
 
-## 4-Hour Market Windows
+Markets are permissionless to create and settle. Pools use pari-mutuel integer
+payouts. Inconclusive markets refund participant stakes, and users claim their
+own payout or refund. Temporary source failures remain retryable according to
+the relevant contract's retry policy.
 
-Crown supports fixed, UTC-aligned windows only:
+## Milestone Update — Studio Next + Energy
 
-```text
-00:00 → 04:00    04:00 → 08:00    08:00 → 12:00
-12:00 → 16:00    16:00 → 20:00    20:00 → 00:00
-```
+Crown was originally accepted as a Bradbury-based, crypto-only 4-hour
+relative-performance prediction market. This milestone migrates Crown to
+GenLayer Studio Next and expands the product with a second intelligent contract
+for Energy prediction markets.
 
-The contract accepts only the 14,400-second duration. A market start must be
-in the future, at least 300 seconds ahead of creation, and aligned to a
-4-hour boundary. Betting closes 60 seconds before the performance starts.
-Settlement becomes available 60 seconds after the performance window ends,
-followed by a 1,800-second retry window for temporary source unavailability.
+The Energy family supports WTI Crude, Brent Crude, and Natural Gas through 1H/2H
+Up/Down and Energy Dominance markets. The frontend presents Crypto and Energy as
+one Crown product while routing each family to its correct deployed contract.
 
-Only one Crown market can exist for an aligned start timestamp. A duplicate
-market for that timestamp is rejected.
-
-## Predictions & Staking
-
-- The asset set is fixed: `BTC`, `ETH`, `SOL`, `BNB`, and `XRP`.
-- Positions are payable in native GEN. Each position addition must be between
-  `1 GEN` and `10 GEN`.
-- A wallet's cumulative position is capped at `10 GEN` per market.
-- A wallet can choose only one asset. Top-ups are allowed for that same asset
-  while the market is `OPEN`; switching is rejected.
-- The contract has no withdrawal method. Funds are released through `claim`
-  after a market is resolved or marked inconclusive.
-
-Crown's pool percentages show how GEN is distributed across the five assets;
-they do not determine the result.
-
-## Settlement
-
-Anyone may call `settle_market` once settlement is ready. The caller supplies
-only the market ID; the contract determines the result.
-
-For each of the five assets, each source independently retrieves one exact
-native 4-hour candle for the market window, calculates its return, and selects
-the unique highest-return asset. Conceptually:
-
-```text
-return = (close - open) / open
-```
-
-The contract compares fixed-point normalized returns using truncation toward
-zero:
-
-```text
-normalized_return = trunc_toward_zero((close - open) * 10^12 / open)
-```
-
-The sources are Binance, Bitget, and Gate. The contract validates each source's
-response, timestamp, candle shape, and positive prices before using it.
-
-Source outcomes are:
-
-- `VALID` — the source produced a unique winner from valid candle data.
-- `TIE` — the highest normalized return was shared, so the source casts no vote.
-- `UNAVAILABLE` — a temporary network or HTTP failure remained after bounded
-  retries.
-- `INVALID` — the response or candle did not satisfy the contract's rules.
-
-Only `VALID` source winners vote. Two matching valid votes resolve the market.
-`TIE`, `INVALID`, and `UNAVAILABLE` do not vote. If all three sources are valid
-but disagree, the market becomes `INCONCLUSIVE` immediately. An unavailable
-source can leave the market unresolved for retries during the 1,800-second
-retry window; other insufficient evidence becomes `INCONCLUSIVE` under the
-contract's finalization rules. A consensus winner with no backing is also
-changed to `INCONCLUSIVE`, so participants can take the refund path.
-
-```mermaid
-flowchart TD
-    A[BTC · ETH · SOL · BNB · XRP] --> B[Binance]
-    A --> C[Bitget]
-    A --> D[Gate]
-    B --> E[Source winner or non-vote]
-    C --> E
-    D --> E
-    E --> F{2-of-3 consensus}
-    F -->|Yes| G[Resolved]
-    F -->|No or retryable| H[Retry or Inconclusive]
-```
-
-## Payouts & Refunds
-
-In a resolved market, a winning wallet claims its proportional share of the
-total pool:
-
-```text
-payout = stake * total_pool // winning_pool
-```
-
-The division uses integer floor rounding. The final winning claimant receives
-the remaining integer pool balance, which accounts for rounding dust. Losing
-positions cannot claim.
-
-In an `INCONCLUSIVE` market, each participant can claim their original stake.
-Claims are recorded by the contract and cannot be claimed twice.
-
-## Contract Interface
-
-### Reads
-
-- `get_market(market_id)` — lifecycle timestamps, status, pools, winner, and
-  settlement and claim accounting.
-- `get_user_position(market_id, user)` — selected asset, stake, remaining
-  capacity, result, and claimable amount.
-- `get_resolution(market_id)` — per-source statuses and winners, consensus,
-  and final winner.
-- `get_open_markets(offset, limit)` — paginated previews of markets currently
-  open for staking.
-- `get_markets(offset, limit)` — paginated previews of all markets.
-- `get_market_by_start(start_timestamp)` — checks the canonical market for an
-  aligned start timestamp.
-- `get_protocol_config()` — returns the fixed assets, timing, stake limits,
-  sources, consensus threshold, and rounding policy.
-
-### Writes
-
-- `create_market(market_start_timestamp, duration)` — creates a valid future
-  window and returns its market ID.
-- `place_position(market_id, asset)` — payable stake or same-asset top-up.
-- `settle_market(market_id)` — advances an eligible unresolved market using
-  contract-defined source settlement.
-- `claim(market_id)` — claims a winning payout or an inconclusive refund.
+The milestone also adds Transaction Kit RC2 integration and has been tested
+end-to-end with real market creation, betting, settlement, and claim/refund
+paths where applicable.
 
 ## Frontend
 
-The frontend is a React/TypeScript application for GenLayer Studio Next. It
-uses RainbowKit with injected wallets for connection, genlayer-js 2.0.0-rc.1
-for contract reads, and Transaction Kit RC2 for fee-aware writes. The contract
-remains the source of truth for market status, pools, positions, settlement,
-and claims.
+The frontend uses RainbowKit with injected wallets, genlayer-js `2.0.0-rc.1`,
+and Transaction Kit RC2 (`@genlayer/transaction-kit` and
+`@genlayer/transaction-kit-react` `0.1.0-rc.2`). The informational Crypto chart
+does not determine settlement; the contracts remain authoritative.
 
-The Binance live chart is informational only. It is a presentation view and
-does not determine the result. Contract settlement still uses Binance, Bitget,
-and Gate.
-
-## Run Locally
-
-The frontend uses Bun and Vite:
+## Local Development
 
 ```bash
 cd frontend
@@ -216,26 +76,3 @@ bun run dev
 ```
 
 Open the local Vite URL, normally `http://localhost:5173`.
-
-## Network
-
-- Network: GenLayer Studio Next / Studio-dev preview
-- Chain ID: `61997`
-- RPC: `https://studio-next.genlayer.com/api`
-- Explorer: `https://explorer-studio-dev.genlayer.com/`
-- Crypto Crown contract: `0x7180CEEd2aa3EF8259A3eA5E88a4Bad4513b78CE`
-- Crown Energy contract: `0x03EbF39d511809bDcEC74F3740260dc5E136F46f`
-
-## Milestone Upgrade
-
-The accepted Crown baseline was a Bradbury crypto-only deployment with 4-hour
-relative-performance markets. The current milestone migrates Crown to Studio
-Next, uses Transaction Kit RC2, adds a separate Energy intelligent contract,
-and unifies Crypto and Energy markets in one frontend. Energy is part of Crown,
-not a separate Fuse product.
-
-Current market families:
-
-- **Crypto:** BTC, ETH, SOL, BNB, and XRP relative performance over 4 hours.
-- **Energy:** WTI crude, Brent crude, and natural gas with Up/Down and Energy
-  Dominance markets over 1-hour or 2-hour windows.
